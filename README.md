@@ -14,7 +14,10 @@ The playlist is cached on the device, so the app opens instantly; use **Refresh*
 
 ## Install
 
-**Fire TV:** open the *Downloader* app and enter
+> ### 📺 Fire TV — Downloader code: **`2627204`**
+> Open the **Downloader** app, type **2627204** and press Go. The APK downloads and installs straight away.
+
+Or enter the full link in Downloader:
 
 ```
 https://github.com/hansonds/Phoenicx-TV/releases/latest/download/PhoenicxTV.apk

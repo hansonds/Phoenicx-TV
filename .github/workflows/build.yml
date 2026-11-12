@@ -58,7 +58,7 @@ jobs:
           body: |
             **Phoenicx TV ${{ steps.version.outputs.value }}** — a tiny IPTV player for Fire TV, Android TV and phones.
 
-            **Install on Fire TV:** open the *Downloader* app and enter
+            **Install on Fire TV:** open the *Downloader* app and type the code **2627204**, or enter
             `https://github.com/${{ github.repository }}/releases/latest/download/PhoenicxTV.apk`
 
           files: out/PhoenicxTV.apk
