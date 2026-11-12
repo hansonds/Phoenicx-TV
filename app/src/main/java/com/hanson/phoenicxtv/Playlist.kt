@@ -8,7 +8,10 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-class Channel(val name: String, val url: String, val logo: String?, val group: String)
+class Channel(
+    val name: String, val url: String, val logo: String?, val group: String,
+    val userAgent: String? = null, val referer: String? = null
+)
 
 class Group(val name: String, val channels: List<Channel>)
 
@@ -61,10 +64,14 @@ object Playlist {
         var name: String? = null
         var logo: String? = null
         var group = "Other"
+        var ua: String? = null
+        var ref: String? = null
         for (raw in text.lineSequence()) {
             val line = raw.trim()
             if (line.isEmpty()) continue
             if (line.startsWith("#EXTINF", ignoreCase = true)) {
+                ua = null
+                ref = null
                 val comma = line.lastIndexOf(',')
                 name = if (comma >= 0) line.substring(comma + 1).trim() else ""
                 val attrs = if (comma >= 0) line.substring(0, comma) else line
@@ -73,12 +80,38 @@ object Playlist {
                 if (name.isEmpty()) name = attr(attrs, "tvg-name") ?: "Channel"
             } else if (line.startsWith("#EXTGRP:", ignoreCase = true)) {
                 group = line.substring(8).trim().ifEmpty { "Other" }
+            } else if (line.startsWith("#EXTVLCOPT:", ignoreCase = true)) {
+                // VLC-style per-channel headers, used by many providers.
+                val opt = line.substring(11)
+                val eq = opt.indexOf('=')
+                if (eq > 0) {
+                    val key = opt.substring(0, eq).trim().lowercase()
+                    val value = opt.substring(eq + 1).trim()
+                    if (key == "http-user-agent") ua = value
+                    if (key == "http-referrer") ref = value
+                }
             } else if (!line.startsWith("#")) {
                 if (name != null) {
-                    result.add(Channel(name, line, logo, group))
+                    // Kodi-style "url|User-Agent=...&Referer=..." suffix.
+                    var url = line
+                    val bar = line.indexOf('|')
+                    if (bar > 0) {
+                        url = line.substring(0, bar)
+                        for (pair in line.substring(bar + 1).split('&')) {
+                            val eq = pair.indexOf('=')
+                            if (eq <= 0) continue
+                            val key = pair.substring(0, eq).trim().lowercase()
+                            val value = java.net.URLDecoder.decode(pair.substring(eq + 1).trim(), "UTF-8")
+                            if (key == "user-agent") ua = value
+                            if (key == "referer" || key == "referrer") ref = value
+                        }
+                    }
+                    result.add(Channel(name, url, logo, group, ua, ref))
                 }
                 name = null
                 logo = null
+                ua = null
+                ref = null
             }
         }
         return result

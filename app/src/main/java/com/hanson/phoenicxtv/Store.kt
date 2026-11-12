@@ -41,7 +41,9 @@ object Store {
                     Channel(
                         o.getString("n"), o.getString("u"),
                         if (o.has("l")) o.getString("l") else null,
-                        o.optString("g", "Other")
+                        o.optString("g", "Other"),
+                        if (o.has("a")) o.getString("a") else null,
+                        if (o.has("r")) o.getString("r") else null
                     )
                 )
             }
@@ -70,6 +72,8 @@ object Store {
                 for (c in list) {
                     val o = JSONObject().put("n", c.name).put("u", c.url).put("g", c.group)
                     if (c.logo != null) o.put("l", c.logo)
+                    if (c.userAgent != null) o.put("a", c.userAgent)
+                    if (c.referer != null) o.put("r", c.referer)
                     arr.put(o)
                 }
                 File(app.filesDir, CACHE_FILE).writeText(arr.toString())
