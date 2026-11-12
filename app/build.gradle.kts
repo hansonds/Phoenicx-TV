@@ -9,12 +9,12 @@ val computedVersionCode = (versionParts.getOrElse(0) { 0 } * 10000) +
     (versionParts.getOrElse(1) { 0 } * 100) +
     versionParts.getOrElse(2) { 0 }
 
-val keystoreFile = System.getenv("KEYSTORE_FILE")
-val keystorePassword = System.getenv("KEYSTORE_PASSWORD")
-val keyAlias = System.getenv("KEY_ALIAS")
-val keyPassword = System.getenv("KEY_PASSWORD") ?: keystorePassword
-val hasSigning = !keystoreFile.isNullOrBlank() && file(keystoreFile).exists() &&
-    !keystorePassword.isNullOrBlank() && !keyAlias.isNullOrBlank()
+val envKeystoreFile = System.getenv("KEYSTORE_FILE")
+val envKeystorePassword = System.getenv("KEYSTORE_PASSWORD")
+val envKeyAlias = System.getenv("KEY_ALIAS")
+val envKeyPassword = System.getenv("KEY_PASSWORD") ?: envKeystorePassword
+val hasSigning = !envKeystoreFile.isNullOrBlank() && file(envKeystoreFile).exists() &&
+    !envKeystorePassword.isNullOrBlank() && !envKeyAlias.isNullOrBlank()
 
 android {
     namespace = "com.hanson.phoenicxtv"
@@ -34,10 +34,10 @@ android {
     signingConfigs {
         if (hasSigning) {
             create("release") {
-                storeFile = file(keystoreFile!!)
-                storePassword = keystorePassword
-                this.keyAlias = keyAlias
-                this.keyPassword = keyPassword
+                storeFile = file(envKeystoreFile!!)
+                storePassword = envKeystorePassword
+                keyAlias = envKeyAlias
+                keyPassword = envKeyPassword
             }
         }
     }
