@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
 
 val appVersion = rootProject.file("VERSION").readText().trim()
@@ -9,36 +8,30 @@ val computedVersionCode = (versionParts.getOrElse(0) { 0 } * 10000) +
     (versionParts.getOrElse(1) { 0 } * 100) +
     versionParts.getOrElse(2) { 0 }
 
-val envKeystoreFile = System.getenv("KEYSTORE_FILE")
-val envKeystorePassword = System.getenv("KEYSTORE_PASSWORD")
-val envKeyAlias = System.getenv("KEY_ALIAS")
-val envKeyPassword = System.getenv("KEY_PASSWORD") ?: envKeystorePassword
-val hasSigning = !envKeystoreFile.isNullOrBlank() && file(envKeystoreFile).exists() &&
-    !envKeystorePassword.isNullOrBlank() && !envKeyAlias.isNullOrBlank()
 
 android {
     namespace = "com.hanson.phoenicxtv"
-    compileSdk = 35
+    // 37 is required by Media3 1.11.
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.hanson.phoenicxtv"
-        minSdk = 21
+        minSdk = 23
         targetSdk = 35
         versionCode = computedVersionCode
         versionName = appVersion
-        // English only: drops the translated strings every AndroidX library ships with.
-        resourceConfigurations.add("en")
         vectorDrawables.useSupportLibrary = false
+        // FFmpeg native code: ARM only (Fire TV, Android TV boxes, phones). Drops the x86 emulator builds.
+        ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
     }
 
     signingConfigs {
-        if (hasSigning) {
-            create("release") {
-                storeFile = file(envKeystoreFile!!)
-                storePassword = envKeystorePassword
-                keyAlias = envKeyAlias
-                keyPassword = envKeyPassword
-            }
+        // Keystore kept in the repo so every build is signed the same way and updates install over each other.
+        create("release") {
+            storeFile = rootProject.file("signing/phoenicxtv.jks")
+            storePassword = "phoenicxtv"
+            keyAlias = "phoenicxtv"
+            keyPassword = "phoenicxtv"
         }
     }
 
@@ -47,8 +40,13 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            if (hasSigning) signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName("release")
         }
+    }
+
+    androidResources {
+        // English only: drops the translated strings every AndroidX library ships with.
+        localeFilters += listOf("en")
     }
 
     buildFeatures {
@@ -90,6 +88,8 @@ kotlin {
 dependencies {
     // Only what is needed to list channels and play a live stream.
     implementation("androidx.recyclerview:recyclerview:1.4.0")
-    implementation("androidx.media3:media3-exoplayer:1.5.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.5.1")
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
+    // FFmpeg audio decoder (LGPL build) for AC-3 / E-AC-3 / DTS / etc. when the device has no hardware decoder.
+    implementation(files("libs/media3-decoder-ffmpeg-lgpl.aar"))
 }

@@ -24,11 +24,13 @@ https://github.com/hansonds/Phoenicx-TV/releases/latest/download/PhoenicxTV.apk
 
 ## Why it is small
 
-Phoenicx TV uses the Android framework UI (no Compose, no Material library), Google's ExoPlayer (Media3) for playback, and a 100-line logo loader. There is no VLC, no FFmpeg and no native code, so a single APK works on every processor.
+Phoenicx TV uses the Android framework UI (no Compose, no Material library), Google's ExoPlayer (Media3) for playback, and a 100-line logo loader. There is no VLC. The only native code is a small **FFmpeg audio decoder** (LGPL build, ARM only) that handles AC-3, E-AC-3, DTS and similar audio when the device has no hardware decoder for it.
 
 ## Build
 
-The APK is built by GitHub Actions on every push to `main` and published to Releases. Add the `KEYSTORE_BASE64` and `KEYSTORE_PASSWORD` secrets to sign it with your own key; without them a temporary key is used.
+The APK is built by GitHub Actions on every push to `main` and published to Releases, signed with the keystore in `signing/`.
+
+The FFmpeg decoder (`app/libs/media3-decoder-ffmpeg-lgpl.aar`) is the Media3 FFmpeg extension built without GPL components; FFmpeg is licensed under the LGPL 2.1+ and the exact FFmpeg commit is recorded next to the `.aar`. It is the LGPL build made by the [Ultra TV](https://github.com/vantaflow/ultra-tv) project (`android-native/tools/ffmpeg-lgpl/build.sh`).
 
 Phoenicx TV provides **no content**. Only use playlists you are entitled to use.
 
