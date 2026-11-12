@@ -1,0 +1,10 @@
+<resources>
+    <color name="bg">#FF0F1115</color>
+    <color name="bg_card">#FF1B1F27</color>
+    <color name="bg_focus">#FFE8732A</color>
+    <color name="accent">#FFE8732A</color>
+    <color name="text">#FFF2F2F2</color>
+    <color name="text_dim">#FF9AA0AA</color>
+    <color name="text_on_focus">#FF101010</color>
+    <color name="overlay">#99000000</color>
+</resources>

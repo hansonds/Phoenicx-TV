@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">Phoenicx TV</string>
+
+    <string name="setup_title">Add playlist</string>
+    <string name="setup_type_m3u">M3U link</string>
+    <string name="setup_type_xtream">Xtream Codes</string>
+    <string name="setup_name_hint">Playlist name (optional)</string>
+    <string name="setup_url_hint">M3U / M3U8 link (http://…)</string>
+    <string name="setup_server_hint">Server (http://host:port)</string>
+    <string name="setup_user_hint">Username</string>
+    <string name="setup_pass_hint">Password</string>
+    <string name="setup_save">Save &amp; load</string>
+    <string name="setup_loading">Loading playlist…</string>
+    <string name="setup_error_empty">Please fill in all fields.</string>
+    <string name="setup_error_load">Could not load playlist: %1$s</string>
+    <string name="setup_error_none">No channels found in this playlist.</string>
+
+    <string name="home_change">Change playlist</string>
+    <string name="home_refresh">Refresh</string>
+    <string name="home_empty">No groups found.</string>
+    <string name="home_channels_count">%1$d channels</string>
+    <string name="home_refreshing">Refreshing…</string>
+
+    <string name="channels_empty">No channels in this group.</string>
+
+    <string name="player_error">Cannot play this channel.</string>
+    <string name="player_loading">Loading…</string>
+
+    <string name="about">Phoenicx TV %1$s · phoenicx.org</string>
+</resources>
