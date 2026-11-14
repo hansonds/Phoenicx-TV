@@ -24,6 +24,7 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
@@ -72,7 +73,12 @@ class PlayerActivity : Activity() {
         // Hardware decoders first; the bundled FFmpeg decoder steps in for audio the device cannot play.
         val renderers = DefaultRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-        val p = ExoPlayer.Builder(this, renderers).build()
+        // Live TV: always pick the best quality the device can play instead of ramping up from the lowest.
+        val selector = DefaultTrackSelector(this)
+        selector.parameters = selector.buildUponParameters()
+            .setForceHighestSupportedBitrate(true)
+            .build()
+        val p = ExoPlayer.Builder(this, renderers).setTrackSelector(selector).build()
         p.setVideoSurfaceView(surface)
         p.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -105,6 +111,7 @@ class PlayerActivity : Activity() {
         val c = channels[index]
         setResult(RESULT_OK, Intent().putExtra(EXTRA_INDEX, index))
         showInfo(c.name)
+        aspect = 0f
 
         // Things to try, in order: as given → forced HLS (playlists without .m3u8) → the other extension.
         attempts = ArrayList()
@@ -132,12 +139,10 @@ class PlayerActivity : Activity() {
             .setReadTimeoutMs(30000)
         if (c.referer != null) http.setDefaultRequestProperties(mapOf("Referer" to c.referer))
 
-        // Lenient MPEG-TS parsing: start on any keyframe and cope with streams that lack clean access-unit markers.
+        // Lenient MPEG-TS parsing for streams that lack clean access-unit markers.
+        // (Starting on non-IDR keyframes is deliberately NOT enabled: it makes the first seconds blocky.)
         val extractors = DefaultExtractorsFactory()
-            .setTsExtractorFlags(
-                DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
-                    DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
-            )
+            .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
             .setTsExtractorMode(TsExtractor.MODE_MULTI_PMT)
             .setTsExtractorTimestampSearchBytes(188 * 2000)
 
