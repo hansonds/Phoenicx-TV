@@ -8,7 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
 /** The channels of one group, with logos. Click plays; Back returns here. */
@@ -26,9 +26,13 @@ class ChannelsActivity : Activity() {
         channels = Store.group(this, groupName)?.channels ?: emptyList()
 
         val list = findViewById<RecyclerView>(R.id.list)
-        list.layoutManager = LinearLayoutManager(this)
+        // As many ~150 dp square tiles per row as fit the screen (6 on a 1080p TV, 2–3 on a phone).
+        val dm = resources.displayMetrics
+        val widthDp = dm.widthPixels / dm.density - 48
+        val columns = (widthDp / 150f).toInt().coerceIn(2, 8)
+        list.layoutManager = GridLayoutManager(this, columns)
         list.adapter = ChannelAdapter()
-        list.setItemViewCacheSize(20)
+        list.setItemViewCacheSize(30)
 
         if (channels.isEmpty()) {
             val status = findViewById<TextView>(R.id.status)

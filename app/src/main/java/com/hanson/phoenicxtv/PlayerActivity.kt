@@ -21,9 +21,12 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
@@ -45,7 +48,15 @@ class PlayerActivity : Activity() {
     private var channels: List<Channel> = emptyList()
     private var index = 0
     private var attempts: MutableList<Attempt> = ArrayList()
+    private var current: Attempt? = null
     private var aspect = 0f
+
+    // Stall watchdog state.
+    private var hasPlayed = false          // the current channel has shown video at least once
+    private var bufferingSince = 0L        // when the current buffering spell started (0 = not buffering)
+    private var lastPosition = -1L
+    private var frozenSince = 0L
+    private var reconnects = 0
 
     private val hideInfo = Runnable { info.visibility = View.GONE }
 
@@ -78,12 +89,32 @@ class PlayerActivity : Activity() {
         selector.parameters = selector.buildUponParameters()
             .setForceHighestSupportedBitrate(true)
             .build()
-        val p = ExoPlayer.Builder(this, renderers).setTrackSelector(selector).build()
+        // Start (and resume after a network hiccup) as soon as 1–2 s of video is ready,
+        // while keeping up to 50 s buffered ahead to ride out slow patches.
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(15000, 50000, 1000, 2000)
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+        val p = ExoPlayer.Builder(this, renderers)
+            .setTrackSelector(selector)
+            .setLoadControl(loadControl)
+            .build()
         p.setVideoSurfaceView(surface)
         p.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 progress.visibility =
                     if (playbackState == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
+                if (playbackState == Player.STATE_BUFFERING) {
+                    if (bufferingSince == 0L) bufferingSince = now()
+                } else {
+                    bufferingSince = 0L
+                }
+                if (playbackState == Player.STATE_READY) {
+                    hasPlayed = true
+                    reconnects = 0
+                }
+                // A live stream should never "end": treat it as a dropped connection.
+                if (playbackState == Player.STATE_ENDED) scheduleReconnect()
             }
 
             override fun onVideoSizeChanged(videoSize: VideoSize) {
@@ -99,13 +130,68 @@ class PlayerActivity : Activity() {
         })
         player = p
         play()
+        handler.post(watchdog)
     }
 
     override fun onStop() {
         super.onStop()
+        handler.removeCallbacks(watchdog)
+        handler.removeCallbacks(reconnectNow)
         player?.release()
         player = null
     }
+
+    /**
+     * Checks the player once a second and reconnects by itself when playback is stuck:
+     * buffering for too long, or the picture frozen while the player claims to be playing.
+     */
+    private val watchdog = object : Runnable {
+        override fun run() {
+            val p = player ?: return
+            val t = now()
+            if (p.playWhenReady && current != null) {
+                when (p.playbackState) {
+                    Player.STATE_BUFFERING -> {
+                        val limit = if (hasPlayed) STALL_RECONNECT_MS else FIRST_START_LIMIT_MS
+                        if (bufferingSince != 0L && t - bufferingSince > limit) {
+                            bufferingSince = 0L
+                            if (hasPlayed) reconnect() else tryNextOrFail(null)
+                        }
+                    }
+                    Player.STATE_READY -> {
+                        val pos = p.currentPosition
+                        if (pos != lastPosition) {
+                            lastPosition = pos
+                            frozenSince = t
+                        } else if (t - frozenSince > FROZEN_RECONNECT_MS) {
+                            frozenSince = t
+                            reconnect()
+                        }
+                    }
+                }
+            }
+            handler.postDelayed(this, 1000)
+        }
+    }
+
+    private val reconnectNow = Runnable { reconnect() }
+
+    private fun scheduleReconnect() {
+        handler.removeCallbacks(reconnectNow)
+        // 1 s for the first few tries, then back off a little so a dead server isn't hammered.
+        val delay = if (reconnects < 5) 1000L else 3000L
+        handler.postDelayed(reconnectNow, delay)
+    }
+
+    /** Reloads the current stream from the live edge. */
+    private fun reconnect() {
+        val a = current ?: return
+        reconnects++
+        showInfo(getString(R.string.player_reconnecting))
+        load(a)
+    }
+
+    private fun now() = android.os.SystemClock.elapsedRealtime()
 
     private fun play() {
         val c = channels[index]
@@ -115,6 +201,9 @@ class PlayerActivity : Activity() {
 
         // Things to try, in order: as given → forced HLS (playlists without .m3u8) → the other extension.
         attempts = ArrayList()
+        hasPlayed = false
+        reconnects = 0
+        handler.removeCallbacks(reconnectNow)
         val url = c.url
         val lower = url.lowercase()
         attempts.add(Attempt(url, null))
@@ -127,16 +216,24 @@ class PlayerActivity : Activity() {
     }
 
     private fun startNext() {
-        val p = player ?: return
         val a = attempts.removeAt(0)
+        current = a
+        load(a)
+    }
+
+    private fun load(a: Attempt) {
+        val p = player ?: return
         val c = channels[index]
         progress.visibility = View.VISIBLE
+        bufferingSince = now()
+        lastPosition = -1L
+        frozenSince = now()
 
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent(c.userAgent ?: DEFAULT_UA)
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(20000)
-            .setReadTimeoutMs(30000)
+            .setConnectTimeoutMs(10000)
+            .setReadTimeoutMs(15000)
         if (c.referer != null) http.setDefaultRequestProperties(mapOf("Referer" to c.referer))
 
         // Lenient MPEG-TS parsing for streams that lack clean access-unit markers.
@@ -147,15 +244,41 @@ class PlayerActivity : Activity() {
             .setTsExtractorTimestampSearchBytes(188 * 2000)
 
         val item = MediaItem.Builder().setUri(a.url).setMimeType(a.mimeType).build()
-        p.setMediaSource(DefaultMediaSourceFactory(http, extractors).createMediaSource(item))
+        val factory = DefaultMediaSourceFactory(http, extractors)
+            .setLoadErrorHandlingPolicy(QuickRetryPolicy())
+        p.setMediaSource(factory.createMediaSource(item))
         p.prepare()
         p.playWhenReady = true
     }
 
     private fun onError(error: PlaybackException) {
+        // Fell behind the live window (e.g. after a long network pause): jump back to live.
+        if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+            player?.seekToDefaultPosition()
+            player?.prepare()
+            return
+        }
+        // The channel was already playing: it's a network drop, keep reconnecting.
+        if (hasPlayed) { scheduleReconnect(); return }
+        tryNextOrFail(error)
+    }
+
+    /** Before the channel has ever played: try the next way of opening it, or give up with a reason. */
+    private fun tryNextOrFail(error: PlaybackException?) {
         if (attempts.isNotEmpty()) { startNext(); return }
+        current = null
+        player?.stop()
         progress.visibility = View.GONE
-        Toast.makeText(this, getString(R.string.player_error) + " (" + describe(error) + ")", Toast.LENGTH_LONG).show()
+        val reason = if (error != null) describe(error) else "timeout"
+        Toast.makeText(this, getString(R.string.player_error) + " (" + reason + ")", Toast.LENGTH_LONG).show()
+    }
+
+    /** Retries a failed network request after 1 s instead of the default growing delay. */
+    private class QuickRetryPolicy : DefaultLoadErrorHandlingPolicy(3) {
+        override fun getRetryDelayMsFor(info: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+            val d = super.getRetryDelayMsFor(info)
+            return if (d == androidx.media3.common.C.TIME_UNSET) d else 1000L
+        }
     }
 
     /** Short human reason for the failure, shown in the toast so problems can be diagnosed. */
@@ -239,11 +362,16 @@ class PlayerActivity : Activity() {
 
     override fun onDestroy() {
         handler.removeCallbacks(hideInfo)
+        handler.removeCallbacks(watchdog)
+        handler.removeCallbacks(reconnectNow)
         super.onDestroy()
     }
 
     companion object {
         const val EXTRA_INDEX = "index"
+        private const val STALL_RECONNECT_MS = 6000L   // buffering this long mid-play → reconnect
+        private const val FROZEN_RECONNECT_MS = 5000L  // picture not moving this long → reconnect
+        private const val FIRST_START_LIMIT_MS = 15000L // channel never started → try next way / fail
         // Browser-like UA: some providers refuse unknown players.
         private const val DEFAULT_UA =
             "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"

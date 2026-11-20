@@ -13,10 +13,10 @@ import java.util.concurrent.Executors
 
 /** Tiny channel-logo loader (memory + disk cache). Replaces a full image library. */
 object Logos {
-    private const val MAX_PX = 160
+    private const val MAX_PX = 256
     private val pool = Executors.newFixedThreadPool(3)
     private val main = Handler(Looper.getMainLooper())
-    private val memory = object : LruCache<String, Bitmap>(4 * 1024 * 1024) {
+    private val memory = object : LruCache<String, Bitmap>(16 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
 

@@ -25,6 +25,7 @@
 
     <string name="player_error">Cannot play this channel.</string>
     <string name="player_loading">Loading…</string>
+    <string name="player_reconnecting">Reconnecting…</string>
 
     <string name="about">Phoenicx TV %1$s · phoenicx.org</string>
 </resources>
